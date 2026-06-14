@@ -4,7 +4,7 @@
  */
 
 window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
-    console.log('thumbsup.js: Starting generation for', sourcePath);
+    console.log('thumbsup.js: Attempting to generate thumbnail for', sourcePath);
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -20,7 +20,7 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
     const imgHeight = imageElement.naturalHeight || imageElement.height;
 
     if (!imgWidth || !imgHeight) {
-        console.error('thumbsup.js: Invalid image dimensions', imgWidth, imgHeight);
+        console.error('thumbsup.js: Image dimensions are 0. Cannot generate thumbnail.');
         return;
     }
 
@@ -40,11 +40,12 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
         x = (150 - drawWidth) / 2;
     }
 
+    console.log(`thumbsup.js: Drawing ${imgWidth}x${imgHeight} to 150x100 canvas at (${x},${y}) with size ${drawWidth}x${drawHeight}`);
     ctx.drawImage(imageElement, x, y, drawWidth, drawHeight);
 
     // Convert to base64
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    console.log('thumbsup.js: Data URL generated, size:', dataUrl.length);
+    console.log('thumbsup.js: Data URL generated. Base64 length:', dataUrl.length);
 
     // Upload
     fetch('thumbnail.php', {
@@ -57,38 +58,41 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
     })
     .then(response => {
         if (!response.ok) {
-            return response.text().then(text => { throw new Error(text || response.statusText) });
+            return response.text().then(text => { throw new Error('Server responded with ' + response.status + ': ' + text) });
         }
         return response.json();
     })
     .then(data => {
-        console.log('thumbsup.js: Upload successful', data);
-        // Update the UI tile with the new thumbnail
-        if (data.status === 'success') {
+        console.log('thumbsup.js: Server response:', data);
+
+        if (data.status === 'success' || data.status === 'exists') {
             const tile = document.querySelector(`.tile[data-src="${CSS.escape(sourcePath)}"]`);
             if (tile) {
-                tile.removeAttribute('data-needs-thumb');
-                const img = tile.querySelector('img');
-                // Use the direct thumbnail URL returned or pre-calculated
+                console.log('thumbsup.js: Updating tile UI for', sourcePath);
+                tile.setAttribute('data-needs-thumb', 'false');
+                const imgContainer = tile.querySelector('.tile-image-container');
+                const existingImg = imgContainer.querySelector('img');
+
                 const thumbUrl = tile.getAttribute('data-thumb');
                 const finalThumbUrl = thumbUrl + '?t=' + Date.now();
 
-                if (img) {
-                    img.src = finalThumbUrl;
+                if (existingImg) {
+                    existingImg.src = finalThumbUrl;
                 } else {
                     const newImg = document.createElement('img');
                     newImg.src = finalThumbUrl;
                     newImg.alt = tile.getAttribute('data-filename');
                     newImg.loading = 'lazy';
                     newImg.onload = () => {
-                        tile.querySelector('.placeholder').style.display = 'none';
-                        tile.querySelector('.tile-image-container').appendChild(newImg);
+                        const placeholder = imgContainer.querySelector('.placeholder');
+                        if (placeholder) placeholder.style.display = 'none';
+                        imgContainer.appendChild(newImg);
                     };
                 }
             }
         }
     })
     .catch(err => {
-        console.error('thumbsup.js: Upload failed', err);
+        console.error('thumbsup.js: Upload process failed:', err);
     });
 };

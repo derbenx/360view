@@ -25,7 +25,7 @@ if (!is_dir($baseDir)) {
 // Helper to get thumb path from source path
 function getThumbPath($sourceFile, $thumbsRootDir, $baseDir, $debugLog) {
     $realBase = realpath($baseDir);
-    // Source file might be passed as ./360-8K/file.jpg or 360-8K/file.jpg
+    // Source file might be passed as ./360-8K/file.jpg, which we need to resolve
     $realFile = realpath($sourceFile);
 
     if ($debugLog) error_log("Path resolving: source=$sourceFile, realBase=$realBase, realFile=" . ($realFile ?: 'FALSE'));
@@ -44,13 +44,15 @@ function getThumbPath($sourceFile, $thumbsRootDir, $baseDir, $debugLog) {
 // Handle POST for crowd-sourced generation
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     header('Content-Type: application/json');
-    $input = json_decode(file_get_contents('php://input'), true);
+    $rawInput = file_get_contents('php://input');
+    $input = json_decode($rawInput, true);
+
+    if ($debugLog) error_log("POST Request Received. Raw Length: " . strlen($rawInput));
+
     $file = isset($input['file']) ? $input['file'] : '';
     $data = isset($input['data']) ? $input['data'] : '';
 
-    if ($debugLog) error_log("POST Request: file=$file, dataLength=" . strlen($data));
-
-    if (!$file || !$data || strlen($data) > 250000) {
+    if (!$file || !$data || strlen($data) > 350000) { // Bumped to 350KB
         header("HTTP/1.1 400 Bad Request");
         $err = "Invalid input or data too large (" . strlen($data) . ")";
         if ($debugLog) error_log("ERROR: $err");
@@ -61,7 +63,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $thumbPath = getThumbPath($file, $thumbsRootDir, $baseDir, $debugLog);
     if (!$thumbPath) {
         header("HTTP/1.1 403 Forbidden");
-        if ($debugLog) error_log("ERROR: getThumbPath returned false");
+        if ($debugLog) error_log("ERROR: getThumbPath failed for $file");
         echo json_encode(['error' => 'Path forbidden or invalid']);
         exit;
     }
@@ -72,6 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
+    // Ensure thumb subdirectory exists
     $thumbDir = dirname($thumbPath);
     if (!is_dir($thumbDir)) {
         if (!mkdir($thumbDir, 0777, true)) {
@@ -89,6 +92,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     if ($decodedData) {
         if (file_put_contents($thumbPath, $decodedData)) {
+            @chmod($thumbPath, 0666);
             if ($debugLog) error_log("SUCCESS: Thumbnail saved to $thumbPath");
             echo json_encode(['status' => 'success', 'path' => $thumbPath]);
         } else {
@@ -97,20 +101,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             echo json_encode(['error' => 'Failed to write file']);
         }
     } else {
-        if ($debugLog) error_log("ERROR: Base64 decode failed");
+        if ($debugLog) error_log("ERROR: Base64 decode failed for $file");
         header("HTTP/1.1 400 Bad Request");
         echo json_encode(['error' => 'Invalid base64 data']);
     }
     exit;
 }
 
-// Handle GET for serving thumbnails
+// Handle GET for serving thumbnails (fallback)
 $file = isset($_GET['file']) ? $_GET['file'] : '';
 if ($debugLog) error_log("GET Request: file=$file");
 
 if (!$file) {
     header("HTTP/1.1 404 Not Found");
-    if ($debugLog) error_log("ERROR: No file specified in GET");
     exit;
 }
 
@@ -123,7 +126,7 @@ if ($thumbPath && file_exists($thumbPath)) {
     readfile($thumbPath);
     exit;
 } else {
-    if ($debugLog) error_log("INFO: Thumbnail NOT found: " . ($thumbPath ?: 'FALSE'));
+    if ($debugLog) error_log("INFO: Thumbnail NOT found for GET: " . ($thumbPath ?: 'PATH_ERR'));
     header("HTTP/1.1 404 Not Found");
     exit;
 }

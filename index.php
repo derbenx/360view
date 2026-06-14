@@ -7,17 +7,25 @@ $files = array_diff(scandir($dir), array('.', '..'));
 <head>
     <title>360 Viewer</title>
     <script src="https://aframe.io/releases/1.6.0/aframe.min.js"></script>
-    <style>
-        body { font-family: sans-serif; }
-        .hidden { display: none; }
-        #overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 9999; }
-        ul { list-style: none; padding: 20px; }
-        li { margin: 10px 0; }
-        a { cursor: pointer; color: blue; text-decoration: underline; }
-    </style>
+    <link rel="stylesheet" href="style.css">
 </head>
 <body>
-
+<center>
+  <div id="blurb">
+    <h2>360 Viewer for desktop and VR</h2>
+    These are 360 images, you can drag them around to see a full 360 view. If you have VR, click the vr button in the bottom right.
+    The files with _OU in the name are stereoscopic, they take longer to load, if you aren't using a 3D capable display or VR, stick with the regular images to save load time.
+  </div>
+    <div id="loading-overlay" class="hidden">
+        <div id="loading-content">
+            <p>Please wait, loading...</p>
+            <div id="progress-bar-container">
+                <div id="progress-bar"></div>
+            </div>
+        </div>
+    </div>
+    <p>
+<div id="list">
     <ul>
         <?php foreach($files as $file): ?>
             <li>
@@ -27,7 +35,7 @@ $files = array_diff(scandir($dir), array('.', '..'));
             </li>
         <?php endforeach; ?>
     </ul>
-
+</div>
 
 
 <div id="preload-container" style="display:none;"></div>
@@ -36,7 +44,6 @@ $files = array_diff(scandir($dir), array('.', '..'));
     <div id="back-button" style="position:absolute; top:20px; left:20px; z-index:10000; background:white; padding:10px; cursor:pointer;">Back to Gallery</div>
     
 <a-scene embedded id="vr-scene">
-    <a-sky id="vr-sky"></a-sky>
     
     <a-entity camera look-controls></a-entity>
  
@@ -57,5 +64,6 @@ $files = array_diff(scandir($dir), array('.', '..'));
 </div>
 
     <script src="script.js"></script>
+    </center>
 </body>
 </html>

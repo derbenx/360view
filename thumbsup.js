@@ -69,7 +69,10 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
             if (tile) {
                 tile.removeAttribute('data-needs-thumb');
                 const img = tile.querySelector('img');
-                const finalThumbUrl = 'thumbnail.php?file=' + encodeURIComponent(sourcePath) + '&t=' + Date.now();
+                // Use the direct thumbnail URL returned or pre-calculated
+                const thumbUrl = tile.getAttribute('data-thumb');
+                const finalThumbUrl = thumbUrl + '?t=' + Date.now();
+
                 if (img) {
                     img.src = finalThumbUrl;
                 } else {

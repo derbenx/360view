@@ -45,7 +45,8 @@ document.addEventListener('DOMContentLoaded', () => {
                 imgContainer.appendChild(img);
             };
             img.onerror = () => {
-                console.warn(`Thumbnail not found for ${filename}. Keeping placeholder.`);
+                console.warn(`Thumbnail not found for ${filename}. Keeping placeholder, will generate on view.`);
+                tile.setAttribute('data-needs-thumb', 'true');
             };
         });
     } else {

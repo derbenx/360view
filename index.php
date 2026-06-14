@@ -85,27 +85,26 @@ if ($debugLog) error_log("needsThumbsup: " . ($needsThumbsup ? 'TRUE' : 'FALSE')
                 // Make path relative to baseDir for UI display
                 $relativeToRoot = trim(str_replace($baseDir, '', dirname($file)), DIRECTORY_SEPARATOR);
 
-                // Pre-check if thumbnail exists for JS logic
-                $hasThumb = false;
-                if ($realBase !== false) {
-                    $realFile = realpath($file);
-                    if ($realFile !== false && strpos($realFile, $realBase) === 0) {
-                        $relative = substr($realFile, strlen($realBase));
-                        $thumbPath = $thumbsRootDir . $relative;
-                        if (file_exists($thumbPath)) {
-                            $hasThumb = true;
-                        }
-                    }
+                $realFile = realpath($file);
+                $relativeToRoot = '';
+                $thumbUrl = '';
+
+                if ($realBase !== false && $realFile !== false && strpos($realFile, $realBase) === 0) {
+                    $relative = substr($realFile, strlen($realBase));
+                    $relativeToRoot = trim(dirname($relative), DIRECTORY_SEPARATOR);
+
+                    // Direct path to thumbnail for the browser to load
+                    $thumbUrl = 'thumbs' . $relative;
                 }
 
-                // We need to pass a path that thumbnail.php can understand relative to itself
-                $webPath = './360-8K' . substr(realpath($file), strlen($realBase));
+                // We need to pass a path that the scripts can understand
+                $webPath = './360-8K' . $relative;
             ?>
                 <div class="tile open-image"
                      data-src="<?php echo htmlspecialchars($webPath); ?>"
                      data-filename="<?php echo htmlspecialchars($fileName); ?>"
-                     data-thumb="thumbnail.php?file=<?php echo urlencode($webPath); ?>"
-                     data-needs-thumb="<?php echo $hasThumb ? 'false' : 'true'; ?>">
+                     data-thumb="<?php echo htmlspecialchars($thumbUrl); ?>"
+                     data-needs-thumb="false">
                     <div class="tile-image-container">
                         <div class="placeholder"></div>
                     </div>

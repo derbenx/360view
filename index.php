@@ -1,4 +1,5 @@
 <?php
+// index.php - Main Gallery
 $debugLog = 1;
 if ($debugLog) {
     error_reporting(E_ALL);
@@ -8,10 +9,12 @@ if ($debugLog) {
     error_log("--- index.php reload ---");
 }
 
-$dir = './360-8K';
-$thumbsDir = './thumbs';
-if (!is_dir($thumbsDir)) {
-    mkdir($thumbsDir, 0755, true);
+$baseDir = __DIR__ . '/360-8K';
+$thumbsRootDir = __DIR__ . '/thumbs';
+
+// Ensure thumbs root directory exists
+if (!is_dir($thumbsRootDir)) {
+    @mkdir($thumbsRootDir, 0777, true);
 }
 
 function scanAllFiles($dir) {
@@ -31,22 +34,27 @@ function scanAllFiles($dir) {
     return $files;
 }
 
-$allFiles = scanAllFiles($dir);
+$allFiles = scanAllFiles($baseDir);
 sort($allFiles);
-if ($debugLog) error_log("Found " . count($allFiles) . " files in $dir");
+if ($debugLog) error_log("Found " . count($allFiles) . " files in $baseDir");
 
-// Check if any thumbnails are missing to conditionally load thumbsup.js
+// Check for missing thumbnails to conditionally load thumbsup.js
 $needsThumbsup = false;
-foreach ($allFiles as $file) {
-    $realBase = realpath($dir);
-    $realFile = realpath($file);
-    if ($realFile !== false && strpos($realFile, $realBase) === 0) {
-        $relative = substr($realFile, strlen($realBase));
-        $thumbPath = './thumbs' . $relative;
-        if (!file_exists($thumbPath)) {
-            if ($debugLog) error_log("Missing thumbnail for: $file (Target: $thumbPath)");
-            $needsThumbsup = true;
-            break;
+$realBase = realpath($baseDir);
+
+if ($realBase === false) {
+    if ($debugLog) error_log("CRITICAL: realpath failed for $baseDir");
+} else {
+    foreach ($allFiles as $file) {
+        $realFile = realpath($file);
+        if ($realFile !== false && strpos($realFile, $realBase) === 0) {
+            $relative = substr($realFile, strlen($realBase));
+            $thumbPath = $thumbsRootDir . $relative;
+            if (!file_exists($thumbPath)) {
+                if ($debugLog) error_log("Missing thumbnail for: $file (Target: $thumbPath)");
+                $needsThumbsup = true;
+                break;
+            }
         }
     }
 }
@@ -74,32 +82,37 @@ if ($debugLog) error_log("needsThumbsup: " . ($needsThumbsup ? 'TRUE' : 'FALSE')
         <div id="gallery-grid">
             <?php foreach($allFiles as $file):
                 $fileName = basename($file);
-                $relativeDir = trim(str_replace('./360-8K', '', dirname($file)), '/');
+                // Make path relative to baseDir for UI display
+                $relativeToRoot = trim(str_replace($baseDir, '', dirname($file)), DIRECTORY_SEPARATOR);
 
                 // Pre-check if thumbnail exists for JS logic
-                $realBase = realpath($dir);
-                $realFile = realpath($file);
                 $hasThumb = false;
-                if ($realFile !== false && strpos($realFile, $realBase) === 0) {
-                    $relative = substr($realFile, strlen($realBase));
-                    $thumbPath = './thumbs' . $relative;
-                    if (file_exists($thumbPath)) {
-                        $hasThumb = true;
+                if ($realBase !== false) {
+                    $realFile = realpath($file);
+                    if ($realFile !== false && strpos($realFile, $realBase) === 0) {
+                        $relative = substr($realFile, strlen($realBase));
+                        $thumbPath = $thumbsRootDir . $relative;
+                        if (file_exists($thumbPath)) {
+                            $hasThumb = true;
+                        }
                     }
                 }
+
+                // We need to pass a path that thumbnail.php can understand relative to itself
+                $webPath = './360-8K' . substr(realpath($file), strlen($realBase));
             ?>
                 <div class="tile open-image"
-                     data-src="<?php echo htmlspecialchars($file); ?>"
+                     data-src="<?php echo htmlspecialchars($webPath); ?>"
                      data-filename="<?php echo htmlspecialchars($fileName); ?>"
-                     data-thumb="thumbnail.php?file=<?php echo urlencode($file); ?>"
+                     data-thumb="thumbnail.php?file=<?php echo urlencode($webPath); ?>"
                      data-needs-thumb="<?php echo $hasThumb ? 'false' : 'true'; ?>">
                     <div class="tile-image-container">
                         <div class="placeholder"></div>
                     </div>
                     <div class="tile-info">
                         <span class="tile-name"><?php echo htmlspecialchars($fileName); ?></span>
-                        <?php if ($relativeDir): ?>
-                            <span class="tile-path"><?php echo htmlspecialchars($relativeDir); ?></span>
+                        <?php if ($relativeToRoot): ?>
+                            <span class="tile-path"><?php echo htmlspecialchars($relativeToRoot); ?></span>
                         <?php endif; ?>
                     </div>
                 </div>

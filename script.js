@@ -1,12 +1,12 @@
 // Config
 const ENABLE_THUMBNAILS = true;
-const THUMBS_DIR = 'thumbs/';
 const DOWNLOAD_TIMEOUT = 15000; // 15 seconds before considering a stall
 const MAX_RETRIES = 3;
 
 AFRAME.registerComponent('exit-vr-on-button', {
     init: function () {
         this.el.addEventListener('bbuttondown', () => {
+            console.log('B-button pressed: Exiting VR/Viewer');
             const scene = document.querySelector('a-scene');
             if (scene.is('vr-mode')) {
                 scene.exitVR();
@@ -27,12 +27,15 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentFileLoader = null;
     let retryCount = 0;
 
+    console.log('script.js: DOMContentLoaded. ENABLE_THUMBNAILS =', ENABLE_THUMBNAILS);
+
     // --- Thumbnails ---
     if (ENABLE_THUMBNAILS) {
         document.querySelectorAll('.tile').forEach(tile => {
             const thumbSrc = tile.getAttribute('data-thumb');
             const filename = tile.getAttribute('data-filename');
             const imgContainer = tile.querySelector('.tile-image-container');
+
             const img = document.createElement('img');
             img.src = thumbSrc;
             img.alt = filename;
@@ -42,31 +45,28 @@ document.addEventListener('DOMContentLoaded', () => {
                 imgContainer.appendChild(img);
             };
             img.onerror = () => {
-                // Keep the placeholder if thumbnail fails
-                console.warn(`Thumbnail not found for ${filename}`);
-                // Mark this tile as needing a thumbnail to be generated when clicked
-                tile.setAttribute('data-needs-thumb', 'true');
+                console.warn(`Thumbnail not found for ${filename}. Keeping placeholder.`);
             };
         });
+    } else {
+        console.log('Thumbnails disabled. Strictly showing placeholders in gallery.');
     }
 
     // --- VR Button Management ---
     function checkVRSupport() {
         if (navigator.xr) {
             navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
+                console.log('WebXR immersive-vr supported:', supported);
                 if (supported) {
                     createVRButton();
-                } else {
-                    console.log("VR Session not supported");
                 }
             });
         } else {
-            console.log("WebXR not available");
+            console.log("WebXR (navigator.xr) not available in this browser.");
         }
     }
 
     function createVRButton() {
-        // Clear container
         vrButtonContainer.innerHTML = '';
         const btn = document.createElement('button');
         btn.textContent = 'Enter VR';
@@ -81,8 +81,10 @@ document.addEventListener('DOMContentLoaded', () => {
             font-weight: bold;
             font-size: 1rem;
             box-shadow: 0 2px 10px rgba(0,0,0,0.5);
+            pointer-events: auto;
         `;
         btn.addEventListener('click', () => {
+            console.log('Entering VR mode...');
             scene.enterVR();
         });
         vrButtonContainer.appendChild(btn);
@@ -92,6 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- UI Logic ---
     function closeViewer() {
+        console.log('Closing 360 viewer');
         if (overlay.classList.contains('hidden')) return;
 
         overlay.classList.add('hidden');
@@ -101,8 +104,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     document.getElementById('back-button').addEventListener('click', () => {
-        // If we opened this via history.pushState, go back.
-        // Otherwise just close.
         if (window.history.state && window.history.state.viewerOpen) {
             window.history.back();
         } else {
@@ -111,15 +112,14 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     window.addEventListener('popstate', (event) => {
-        // If state is null or doesn't have viewerOpen, close the viewer
         if (!event.state || !event.state.viewerOpen) {
             closeViewer();
         }
     });
 
     document.getElementById('cancel-load').addEventListener('click', () => {
+        console.log('Loading cancelled by user');
         if (currentFileLoader) {
-            // THREE.FileLoader doesn't have an abort() but we can ignore the results
             currentFileLoader = null;
         }
         loadingOverlay.classList.add('hidden');
@@ -132,11 +132,9 @@ document.addEventListener('DOMContentLoaded', () => {
             const fileName = tile.getAttribute('data-filename').toUpperCase();
             const needsThumb = tile.getAttribute('data-needs-thumb') === 'true';
 
-            console.log('script.js: Tile clicked', { src, fileName, needsThumb });
+            console.log('Tile clicked:', { src, fileName, needsThumb });
 
-            // Request orientation permission for mobile "Magic Window"
             requestOrientationPermission();
-
             loadImageWithRetry(src, fileName, needsThumb);
         });
     });
@@ -144,13 +142,12 @@ document.addEventListener('DOMContentLoaded', () => {
     function requestOrientationPermission() {
         if (typeof DeviceOrientationEvent !== 'undefined' &&
             typeof DeviceOrientationEvent.requestPermission === 'function') {
+            console.log('Requesting DeviceOrientation permission...');
             DeviceOrientationEvent.requestPermission()
                 .then(permissionState => {
-                    if (permissionState === 'granted') {
-                        console.log("Orientation permission granted");
-                    }
+                    console.log('DeviceOrientation permission state:', permissionState);
                 })
-                .catch(console.error);
+                .catch(err => console.error('Permission request error:', err));
         }
     }
 
@@ -162,13 +159,14 @@ document.addEventListener('DOMContentLoaded', () => {
         retryCount = 0;
 
         const performLoad = (url) => {
+            console.log('Starting image load:', url);
             const loader = new THREE.FileLoader();
             currentFileLoader = loader;
             loader.setResponseType('blob');
 
             let timeoutId = setTimeout(() => {
                 if (currentFileLoader === loader) {
-                    console.warn("Download stalled, retrying...");
+                    console.warn("Download stalled (timeout), retrying...");
                     handleRetry();
                 }
             }, DOWNLOAD_TIMEOUT);
@@ -179,25 +177,35 @@ document.addEventListener('DOMContentLoaded', () => {
                     clearTimeout(timeoutId);
                     if (currentFileLoader !== loader) return;
 
+                    console.log('Blob loaded successfully. Size:', blob.size);
                     const blobUrl = URL.createObjectURL(blob);
                     const textureLoader = new THREE.TextureLoader();
-                    textureLoader.load(blobUrl, (texture) => {
-                        URL.revokeObjectURL(blobUrl);
-                        texture.colorSpace = THREE.SRGBColorSpace;
+                    textureLoader.load(
+                        blobUrl,
+                        (texture) => {
+                            console.log('Texture created successfully.');
+                            URL.revokeObjectURL(blobUrl);
+                            texture.colorSpace = THREE.SRGBColorSpace;
 
-                        if (needsThumb && typeof window.generateAndUploadThumbnail === 'function') {
-                            window.generateAndUploadThumbnail(texture.image, src);
+                            if (needsThumb && typeof window.generateAndUploadThumbnail === 'function') {
+                                window.generateAndUploadThumbnail(texture.image, src);
+                            }
+
+                            setupScene(texture, fileName);
+                            loadingOverlay.classList.add('hidden');
+                        },
+                        undefined,
+                        (err) => {
+                            console.error('TextureLoader error:', err);
+                            loadingOverlay.classList.add('hidden');
+                            alert('Failed to process image texture.');
                         }
-
-                        setupScene(texture, fileName);
-                        loadingOverlay.classList.add('hidden');
-                    });
+                    );
                 },
                 (xhr) => {
                     if (xhr.lengthComputable) {
                         const percentComplete = (xhr.loaded / xhr.total) * 100;
                         progressBar.style.width = percentComplete + '%';
-                        // Reset timeout on progress
                         clearTimeout(timeoutId);
                         timeoutId = setTimeout(() => {
                             if (currentFileLoader === loader) {
@@ -210,7 +218,7 @@ document.addEventListener('DOMContentLoaded', () => {
                 (err) => {
                     clearTimeout(timeoutId);
                     if (currentFileLoader !== loader) return;
-                    console.error('Error loading image:', err);
+                    console.error('FileLoader error:', err);
                     handleRetry();
                 }
             );
@@ -218,9 +226,11 @@ document.addEventListener('DOMContentLoaded', () => {
             function handleRetry() {
                 if (retryCount < MAX_RETRIES) {
                     retryCount++;
+                    console.log(`Retry attempt ${retryCount}/${MAX_RETRIES} for ${src}`);
                     loadingStatus.textContent = `Stalled. Retry ${retryCount}/${MAX_RETRIES}...`;
-                    performLoad(src + '?t=' + Date.now()); // cache bust
+                    performLoad(src + '?t=' + Date.now());
                 } else {
+                    console.error('Maximum retries reached.');
                     alert('Failed to load image after multiple attempts.');
                     loadingOverlay.classList.add('hidden');
                 }
@@ -231,7 +241,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     function setupScene(texture, fileName) {
-        // 1. Remove old sky entities
+        console.log('Setting up 360 scene for:', fileName);
+
         const oldSkies = scene.querySelectorAll('a-sky');
         oldSkies.forEach(sky => {
             const mesh = sky.getObject3D('mesh');
@@ -246,6 +257,7 @@ document.addEventListener('DOMContentLoaded', () => {
         const isUO = fileName.includes('_UO');
 
         if (isOU || isUO) {
+            console.log('Detected Stereo (Over-Under) image');
             const leftEyeSky = document.createElement('a-sky');
             leftEyeSky.setAttribute('radius', '5000');
             scene.appendChild(leftEyeSky);
@@ -288,6 +300,7 @@ document.addEventListener('DOMContentLoaded', () => {
             scene.addEventListener('enter-vr', updateCameraLayers);
             scene.addEventListener('exit-vr', updateCameraLayers);
         } else {
+            console.log('Detected Mono (360) image');
             const newSky = document.createElement('a-sky');
             scene.appendChild(newSky);
             newSky.addEventListener('loaded', () => {
@@ -298,9 +311,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         overlay.classList.remove('hidden');
-
-                // Add to history so back button works
-                window.history.pushState({ viewerOpen: true }, "");
+        window.history.pushState({ viewerOpen: true }, "");
 
         if (scene.resize) scene.resize();
         scene.play();

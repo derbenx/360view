@@ -21,17 +21,11 @@ if (!is_dir($baseDir)) {
     echo json_encode(['error' => 'Base directory not found']);
     exit;
 }
-if (!is_dir($thumbsRootDir)) {
-    if (!mkdir($thumbsRootDir, 0755, true)) {
-        if ($debugLog) error_log("ERROR: Failed to create thumbs root directory: $thumbsRootDir");
-    } else {
-        if ($debugLog) error_log("INFO: Created thumbs root directory: $thumbsRootDir");
-    }
-}
 
 // Helper to get thumb path from source path
 function getThumbPath($sourceFile, $thumbsRootDir, $baseDir, $debugLog) {
     $realBase = realpath($baseDir);
+    // Source file might be passed as ./360-8K/file.jpg or 360-8K/file.jpg
     $realFile = realpath($sourceFile);
 
     if ($debugLog) error_log("Path resolving: source=$sourceFile, realBase=$realBase, realFile=" . ($realFile ?: 'FALSE'));
@@ -72,13 +66,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         exit;
     }
 
-    if (!file_exists($file)) {
-        header("HTTP/1.1 404 Not Found");
-        if ($debugLog) error_log("ERROR: Source file does not exist: $file");
-        echo json_encode(['error' => 'Source file not found']);
-        exit;
-    }
-
     if (file_exists($thumbPath)) {
         if ($debugLog) error_log("INFO: Thumbnail already exists: $thumbPath");
         echo json_encode(['status' => 'exists']);
@@ -87,7 +74,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
     $thumbDir = dirname($thumbPath);
     if (!is_dir($thumbDir)) {
-        if (!mkdir($thumbDir, 0755, true)) {
+        if (!mkdir($thumbDir, 0777, true)) {
             if ($debugLog) error_log("ERROR: Failed to create directory: $thumbDir");
             header("HTTP/1.1 500 Internal Server Error");
             echo json_encode(['error' => 'Failed to create thumb directory']);

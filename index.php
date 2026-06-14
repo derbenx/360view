@@ -75,8 +75,24 @@ if ($debugLog) error_log("needsThumbsup: " . ($needsThumbsup ? 'TRUE' : 'FALSE')
             <?php foreach($allFiles as $file):
                 $fileName = basename($file);
                 $relativeDir = trim(str_replace('./360-8K', '', dirname($file)), '/');
+
+                // Pre-check if thumbnail exists for JS logic
+                $realBase = realpath($dir);
+                $realFile = realpath($file);
+                $hasThumb = false;
+                if ($realFile !== false && strpos($realFile, $realBase) === 0) {
+                    $relative = substr($realFile, strlen($realBase));
+                    $thumbPath = './thumbs' . $relative;
+                    if (file_exists($thumbPath)) {
+                        $hasThumb = true;
+                    }
+                }
             ?>
-                <div class="tile open-image" data-src="<?php echo htmlspecialchars($file); ?>" data-filename="<?php echo htmlspecialchars($fileName); ?>" data-thumb="thumbnail.php?file=<?php echo urlencode($file); ?>">
+                <div class="tile open-image"
+                     data-src="<?php echo htmlspecialchars($file); ?>"
+                     data-filename="<?php echo htmlspecialchars($fileName); ?>"
+                     data-thumb="thumbnail.php?file=<?php echo urlencode($file); ?>"
+                     data-needs-thumb="<?php echo $hasThumb ? 'false' : 'true'; ?>">
                     <div class="tile-image-container">
                         <div class="placeholder"></div>
                     </div>

@@ -132,6 +132,8 @@ document.addEventListener('DOMContentLoaded', () => {
             const fileName = tile.getAttribute('data-filename').toUpperCase();
             const needsThumb = tile.getAttribute('data-needs-thumb') === 'true';
 
+            console.log('script.js: Tile clicked', { src, fileName, needsThumb });
+
             // Request orientation permission for mobile "Magic Window"
             requestOrientationPermission();
 

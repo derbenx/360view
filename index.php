@@ -1,4 +1,13 @@
 <?php
+$debugLog = 1;
+if ($debugLog) {
+    error_reporting(E_ALL);
+    ini_set('display_errors', 0);
+    ini_set('log_errors', 1);
+    ini_set('error_log', __DIR__ . '/php_error.log');
+    error_log("--- index.php reload ---");
+}
+
 $dir = './360-8K';
 $thumbsDir = './thumbs';
 if (!is_dir($thumbsDir)) {
@@ -24,6 +33,7 @@ function scanAllFiles($dir) {
 
 $allFiles = scanAllFiles($dir);
 sort($allFiles);
+if ($debugLog) error_log("Found " . count($allFiles) . " files in $dir");
 
 // Check if any thumbnails are missing to conditionally load thumbsup.js
 $needsThumbsup = false;
@@ -34,11 +44,13 @@ foreach ($allFiles as $file) {
         $relative = substr($realFile, strlen($realBase));
         $thumbPath = './thumbs' . $relative;
         if (!file_exists($thumbPath)) {
+            if ($debugLog) error_log("Missing thumbnail for: $file (Target: $thumbPath)");
             $needsThumbsup = true;
             break;
         }
     }
 }
+if ($debugLog) error_log("needsThumbsup: " . ($needsThumbsup ? 'TRUE' : 'FALSE'));
 ?>
 <!DOCTYPE html>
 <html lang="en">

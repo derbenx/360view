@@ -24,6 +24,21 @@ function scanAllFiles($dir) {
 
 $allFiles = scanAllFiles($dir);
 sort($allFiles);
+
+// Check if any thumbnails are missing to conditionally load thumbsup.js
+$needsThumbsup = false;
+foreach ($allFiles as $file) {
+    $realBase = realpath($dir);
+    $realFile = realpath($file);
+    if ($realFile !== false && strpos($realFile, $realBase) === 0) {
+        $relative = substr($realFile, strlen($realBase));
+        $thumbPath = './thumbs' . $relative;
+        if (!file_exists($thumbPath)) {
+            $needsThumbsup = true;
+            break;
+        }
+    }
+}
 ?>
 <!DOCTYPE html>
 <html lang="en">
@@ -89,5 +104,8 @@ sort($allFiles);
     </div>
 
     <script src="script.js"></script>
+    <?php if ($needsThumbsup): ?>
+        <script src="thumbsup.js"></script>
+    <?php endif; ?>
 </body>
 </html>

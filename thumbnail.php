@@ -1,8 +1,30 @@
 <?php
-// thumbnail.php - Handle thumbnail serving and crowd-sourced generation
-$thumbsDir = './thumbs';
-if (!is_dir($thumbsDir)) {
-    mkdir($thumbsDir, 0755, true);
+// thumbnail.php - Secure, crowd-sourced thumbnail management with mirrored folder structure
+
+$baseDir = './360-8K';
+$thumbsRootDir = './thumbs';
+
+// Security: Ensure base directories exist
+if (!is_dir($baseDir)) {
+    header("HTTP/1.1 500 Internal Server Error");
+    echo "Base directory not found.";
+    exit;
+}
+if (!is_dir($thumbsRootDir)) {
+    mkdir($thumbsRootDir, 0755, true);
+}
+
+// Helper to get thumb path from source path
+function getThumbPath($sourceFile, $thumbsRootDir, $baseDir) {
+    $realBase = realpath($baseDir);
+    $realFile = realpath($sourceFile);
+
+    if ($realFile === false || strpos($realFile, $realBase) !== 0) {
+        return false;
+    }
+
+    $relative = substr($realFile, strlen($realBase));
+    return $thumbsRootDir . $relative;
 }
 
 // Handle POST for crowd-sourced generation
@@ -11,55 +33,61 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $file = isset($input['file']) ? $input['file'] : '';
     $data = isset($input['data']) ? $input['data'] : '';
 
-    if (!$file || !$data) {
+    // 1. Size Check: Reject if data is too large (100KB should be plenty for 150x100 JPG)
+    if (!$file || !$data || strlen($data) > 150000) {
         header("HTTP/1.1 400 Bad Request");
+        echo json_encode(['error' => 'Invalid data or size too large']);
         exit;
     }
 
-    // Security: Ensure the file is within the 360-8K directory
-    $realBase = realpath('./360-8K');
-    $realFile = realpath($file);
-    if ($realFile === false || strpos($realFile, $realBase) !== 0) {
+    $thumbPath = getThumbPath($file, $thumbsRootDir, $baseDir);
+    if (!$thumbPath) {
         header("HTTP/1.1 403 Forbidden");
         exit;
     }
 
-    $thumbName = md5($file) . '.jpg';
-    $thumbPath = $thumbsDir . '/' . $thumbName;
+    // 2. Source file must exist and 3. Thumb must NOT already exist
+    if (!file_exists($file) || file_exists($thumbPath)) {
+        echo json_encode(['status' => 'exists_or_invalid_source']);
+        exit;
+    }
 
-    // Only save if it doesn't exist
-    if (!file_exists($thumbPath)) {
-        // Decode base64 data
-        $data = str_replace('data:image/jpeg;base64,', '', $data);
-        $data = str_replace(' ', '+', $data);
-        $decodedData = base64_decode($data);
+    // Ensure thumb subdirectory exists
+    $thumbDir = dirname($thumbPath);
+    if (!is_dir($thumbDir)) {
+        mkdir($thumbDir, 0755, true);
+    }
+
+    // Decode base64 data
+    $data = str_replace('data:image/jpeg;base64,', '', $data);
+    $data = str_replace(' ', '+', $data);
+    $decodedData = base64_decode($data);
+
+    if ($decodedData) {
         file_put_contents($thumbPath, $decodedData);
         echo json_encode(['status' => 'success']);
     } else {
-        echo json_encode(['status' => 'exists']);
+        header("HTTP/1.1 400 Bad Request");
+        echo json_encode(['error' => 'Invalid base64 data']);
     }
     exit;
 }
 
 // Handle GET for serving thumbnails
 $file = isset($_GET['file']) ? $_GET['file'] : '';
-if (!$file || !file_exists($file)) {
+if (!$file) {
     header("HTTP/1.1 404 Not Found");
     exit;
 }
 
-$thumbName = md5($file) . '.jpg';
-$thumbPath = $thumbsDir . '/' . $thumbName;
-
-if (file_exists($thumbPath)) {
+$thumbPath = getThumbPath($file, $thumbsRootDir, $baseDir);
+if ($thumbPath && file_exists($thumbPath)) {
     header('Content-Type: image/jpeg');
     header('Content-Length: ' . filesize($thumbPath));
     header('Cache-Control: public, max-age=86400');
     readfile($thumbPath);
     exit;
 } else {
-    // If it doesn't exist, we just return 404.
-    // The client will generate and upload it when they load the full image.
     header("HTTP/1.1 404 Not Found");
     exit;
 }

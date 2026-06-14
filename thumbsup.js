@@ -4,6 +4,8 @@
  */
 
 window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
+    console.log('thumbsup.js: Starting generation for', sourcePath);
+
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
     canvas.width = 150;
@@ -14,7 +16,15 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
     ctx.fillRect(0, 0, 150, 100);
 
     // Calculate aspect ratio preserve
-    const imgAspect = imageElement.width / imageElement.height;
+    const imgWidth = imageElement.naturalWidth || imageElement.width;
+    const imgHeight = imageElement.naturalHeight || imageElement.height;
+
+    if (!imgWidth || !imgHeight) {
+        console.error('thumbsup.js: Invalid image dimensions', imgWidth, imgHeight);
+        return;
+    }
+
+    const imgAspect = imgWidth / imgHeight;
     const targetAspect = 150 / 100;
     let drawWidth, drawHeight, x, y;
 
@@ -34,6 +44,7 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
 
     // Convert to base64
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+    console.log('thumbsup.js: Data URL generated, size:', dataUrl.length);
 
     // Upload
     fetch('thumbnail.php', {
@@ -44,20 +55,26 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
             data: dataUrl
         })
     })
-    .then(res => res.json())
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(text => { throw new Error(text || response.statusText) });
+        }
+        return response.json();
+    })
     .then(data => {
-        console.log('Thumbnail upload status:', data.status);
+        console.log('thumbsup.js: Upload successful', data);
         // Update the UI tile with the new thumbnail
         if (data.status === 'success') {
             const tile = document.querySelector(`.tile[data-src="${CSS.escape(sourcePath)}"]`);
             if (tile) {
                 tile.removeAttribute('data-needs-thumb');
                 const img = tile.querySelector('img');
+                const finalThumbUrl = 'thumbnail.php?file=' + encodeURIComponent(sourcePath) + '&t=' + Date.now();
                 if (img) {
-                    img.src = 'thumbnail.php?file=' + encodeURIComponent(sourcePath) + '&t=' + Date.now();
+                    img.src = finalThumbUrl;
                 } else {
                     const newImg = document.createElement('img');
-                    newImg.src = 'thumbnail.php?file=' + encodeURIComponent(sourcePath) + '&t=' + Date.now();
+                    newImg.src = finalThumbUrl;
                     newImg.alt = tile.getAttribute('data-filename');
                     newImg.loading = 'lazy';
                     newImg.onload = () => {
@@ -68,5 +85,7 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
             }
         }
     })
-    .catch(err => console.error('Error uploading thumbnail:', err));
+    .catch(err => {
+        console.error('thumbsup.js: Upload failed', err);
+    });
 };

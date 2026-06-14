@@ -1,5 +1,5 @@
 // Config
-const ENABLE_THUMBNAILS = false;
+const ENABLE_THUMBNAILS = true;
 const THUMBS_DIR = 'thumbs/';
 const DOWNLOAD_TIMEOUT = 15000; // 15 seconds before considering a stall
 const MAX_RETRIES = 3;
@@ -30,10 +30,11 @@ document.addEventListener('DOMContentLoaded', () => {
     // --- Thumbnails ---
     if (ENABLE_THUMBNAILS) {
         document.querySelectorAll('.tile').forEach(tile => {
+            const thumbSrc = tile.getAttribute('data-thumb');
             const filename = tile.getAttribute('data-filename');
             const imgContainer = tile.querySelector('.tile-image-container');
             const img = document.createElement('img');
-            img.src = THUMBS_DIR + filename;
+            img.src = thumbSrc;
             img.alt = filename;
             img.loading = 'lazy';
             img.onload = () => {
@@ -88,10 +89,29 @@ document.addEventListener('DOMContentLoaded', () => {
     checkVRSupport();
 
     // --- UI Logic ---
-    document.getElementById('back-button').addEventListener('click', () => {
+    function closeViewer() {
+        if (overlay.classList.contains('hidden')) return;
+
         overlay.classList.add('hidden');
         if (scene.is('vr-mode')) {
             scene.exitVR();
+        }
+    }
+
+    document.getElementById('back-button').addEventListener('click', () => {
+        // If we opened this via history.pushState, go back.
+        // Otherwise just close.
+        if (window.history.state && window.history.state.viewerOpen) {
+            window.history.back();
+        } else {
+            closeViewer();
+        }
+    });
+
+    window.addEventListener('popstate', (event) => {
+        // If state is null or doesn't have viewerOpen, close the viewer
+        if (!event.state || !event.state.viewerOpen) {
+            closeViewer();
         }
     });
 
@@ -268,6 +288,10 @@ document.addEventListener('DOMContentLoaded', () => {
         }
 
         overlay.classList.remove('hidden');
+
+                // Add to history so back button works
+                window.history.pushState({ viewerOpen: true }, "");
+
         if (scene.resize) scene.resize();
         scene.play();
         if (scene.render) scene.render();

@@ -44,6 +44,8 @@ document.addEventListener('DOMContentLoaded', () => {
             img.onerror = () => {
                 // Keep the placeholder if thumbnail fails
                 console.warn(`Thumbnail not found for ${filename}`);
+                // Mark this tile as needing a thumbnail to be generated when clicked
+                tile.setAttribute('data-needs-thumb', 'true');
             };
         });
     }
@@ -128,11 +130,12 @@ document.addEventListener('DOMContentLoaded', () => {
             const tile = e.currentTarget;
             const src = tile.getAttribute('data-src');
             const fileName = tile.getAttribute('data-filename').toUpperCase();
+            const needsThumb = tile.getAttribute('data-needs-thumb') === 'true';
 
             // Request orientation permission for mobile "Magic Window"
             requestOrientationPermission();
 
-            loadImageWithRetry(src, fileName);
+            loadImageWithRetry(src, fileName, needsThumb);
         });
     });
 
@@ -149,7 +152,7 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
-    function loadImageWithRetry(src, fileName) {
+    function loadImageWithRetry(src, fileName, needsThumb = false) {
         loadingOverlay.classList.remove('hidden');
         document.getElementById('cancel-load').classList.remove('hidden');
         loadingStatus.textContent = "Loading image...";
@@ -179,6 +182,11 @@ document.addEventListener('DOMContentLoaded', () => {
                     textureLoader.load(blobUrl, (texture) => {
                         URL.revokeObjectURL(blobUrl);
                         texture.colorSpace = THREE.SRGBColorSpace;
+
+                        if (needsThumb) {
+                            generateAndUploadThumbnail(texture.image, src);
+                        }
+
                         setupScene(texture, fileName);
                         loadingOverlay.classList.add('hidden');
                     });
@@ -218,6 +226,74 @@ document.addEventListener('DOMContentLoaded', () => {
         };
 
         performLoad(src);
+    }
+
+    function generateAndUploadThumbnail(imageElement, sourcePath) {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        canvas.width = 150;
+        canvas.height = 100;
+
+        // Fill background
+        ctx.fillStyle = '#333333';
+        ctx.fillRect(0, 0, 150, 100);
+
+        // Calculate aspect ratio preserve
+        const imgAspect = imageElement.width / imageElement.height;
+        const targetAspect = 150 / 100;
+        let drawWidth, drawHeight, x, y;
+
+        if (imgAspect > targetAspect) {
+            drawWidth = 150;
+            drawHeight = 150 / imgAspect;
+            x = 0;
+            y = (100 - drawHeight) / 2;
+        } else {
+            drawHeight = 100;
+            drawWidth = 100 * imgAspect;
+            y = 0;
+            x = (150 - drawWidth) / 2;
+        }
+
+        ctx.drawImage(imageElement, x, y, drawWidth, drawHeight);
+
+        // Convert to base64
+        const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
+
+        // Upload
+        fetch('thumbnail.php', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                file: sourcePath,
+                data: dataUrl
+            })
+        })
+        .then(res => res.json())
+        .then(data => {
+            console.log('Thumbnail upload status:', data.status);
+            // Update the UI tile with the new thumbnail
+            if (data.status === 'success') {
+                const tile = document.querySelector(`.tile[data-src="${CSS.escape(sourcePath)}"]`);
+                if (tile) {
+                    tile.removeAttribute('data-needs-thumb');
+                    const img = tile.querySelector('img');
+                    if (img) {
+                        img.src = 'thumbnail.php?file=' + encodeURIComponent(sourcePath) + '&t=' + Date.now();
+                    } else {
+                        const newImg = document.createElement('img');
+                        newImg.src = 'thumbnail.php?file=' + encodeURIComponent(sourcePath) + '&t=' + Date.now();
+                        newImg.alt = tile.getAttribute('data-filename');
+                        newImg.loading = 'lazy';
+                        newImg.onload = () => {
+                            tile.querySelector('.placeholder').style.display = 'none';
+                            tile.querySelector('.tile-image-container').appendChild(newImg);
+                        };
+                    }
+                }
+            }
+        })
+        .catch(err => console.error('Error uploading thumbnail:', err));
     }
 
     function setupScene(texture, fileName) {

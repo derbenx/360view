@@ -1,6 +1,5 @@
 AFRAME.registerComponent('exit-vr-on-button', {
     init: function () {
-        // This listens for the 'b' button specifically
         this.el.addEventListener('bbuttondown', function () {
             const scene = document.querySelector('a-scene');
             if (scene.is('vr-mode')) {
@@ -12,62 +11,128 @@ AFRAME.registerComponent('exit-vr-on-button', {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-    // Back Button Listener
+    const loadingOverlay = document.getElementById('loading-overlay');
+    const progressBar = document.getElementById('progress-bar');
+    const overlay = document.getElementById('overlay');
+    const scene = document.getElementById('vr-scene');
+
     document.getElementById('back-button').addEventListener('click', () => {
-        document.getElementById('overlay').classList.add('hidden');
+        overlay.classList.add('hidden');
     });
 
-    // Image List Click Handler
     document.querySelectorAll('.open-image').forEach(item => {
         item.addEventListener('click', e => {
             const src = e.target.getAttribute('data-src');
-            const overlay = document.getElementById('overlay');
-            const scene = document.getElementById('vr-scene');
+            const fileName = src.split('/').pop().toUpperCase();
 
-            // 1. Remove old sky
-            const oldSky = document.getElementById('vr-sky');
- if (oldSky) {
-    const oldMaterial = oldSky.getObject3D('mesh').material;
-    if (oldMaterial.map) {
-        oldMaterial.map.dispose(); // Free up GPU memory
-    }
-    oldSky.remove();
-}
-// 1. Create the sky, but keep it invisible initially
-const newSky = document.createElement('a-sky');
-newSky.setAttribute('id', 'vr-sky');
-newSky.setAttribute('visible', 'false'); // Hide until ready
-scene.appendChild(newSky);
+            loadingOverlay.classList.remove('hidden');
+            progressBar.style.width = '0%';
 
-// 2. Load the texture
-const textureLoader = new THREE.TextureLoader();
-textureLoader.load(src, (texture) => {
-    texture.colorSpace = THREE.SRGBColorSpace;
-    
-    // 3. Set material and reveal
-    newSky.setAttribute('material', { src: texture });
-    newSky.setAttribute('visible', 'true'); // Only show when the texture is ready
-    
-    overlay.classList.remove('hidden');
+            // 1. Remove old sky entities
+            const oldSkies = scene.querySelectorAll('a-sky');
+            oldSkies.forEach(sky => {
+                const mesh = sky.getObject3D('mesh');
+                if (mesh && mesh.material) {
+                    if (mesh.material.map) mesh.material.map.dispose();
+                    mesh.material.dispose();
+                }
+                sky.parentNode.removeChild(sky);
+            });
 
-    const sceneEl = document.getElementById('vr-scene');
-    
-    // Force A-Frame to refresh its internal camera and renderer
-    if (sceneEl.resize) {
-        sceneEl.resize(); // Recalculates canvas size[cite: 2]
-    }
-    
-    // Explicitly re-inject the scene into the render loop
-    sceneEl.play(); 
-    
-    // Force a re-render to align the stereo eyes
-    if (sceneEl.render) {
-        sceneEl.render(); // Forces frame update[cite: 2]
-    }
-}); // End textureLoader callback
-        }); // End click listener
-    }); // End forEach
-}); // End DOMContentLoaded
+            // 2. Load the file as a Blob to get progress
+            const fileLoader = new THREE.FileLoader();
+            fileLoader.setResponseType('blob');
+            fileLoader.load(
+                src,
+                (blob) => {
+                    const url = URL.createObjectURL(blob);
+                    const textureLoader = new THREE.TextureLoader();
+                    textureLoader.load(url, (texture) => {
+                        URL.revokeObjectURL(url); // Clean up
+                        texture.colorSpace = THREE.SRGBColorSpace;
+                        setupScene(texture, fileName);
+                    });
+                },
+                (xhr) => {
+                    if (xhr.lengthComputable) {
+                        const percentComplete = (xhr.loaded / xhr.total) * 100;
+                        progressBar.style.width = percentComplete + '%';
+                    }
+                },
+                (err) => {
+                    console.error('An error happened', err);
+                    loadingOverlay.classList.add('hidden');
+                    alert('Error loading image.');
+                }
+            );
+
+            function setupScene(texture, fileName) {
+                const isOU = fileName.includes('_OU');
+                const isUO = fileName.includes('_UO');
+
+                if (isOU || isUO) {
+                    const leftEyeSky = document.createElement('a-sky');
+                    leftEyeSky.setAttribute('radius', '5000');
+                    scene.appendChild(leftEyeSky);
+
+                    const rightEyeSky = document.createElement('a-sky');
+                    rightEyeSky.setAttribute('radius', '5000');
+                    scene.appendChild(rightEyeSky);
+
+                    leftEyeSky.addEventListener('loaded', () => {
+                        const mesh = leftEyeSky.getObject3D('mesh');
+                        mesh.material.map = texture;
+                        mesh.material.map.repeat.set(1, 0.5);
+                        mesh.material.map.offset.set(0, isOU ? 0.5 : 0);
+                        mesh.material.needsUpdate = true;
+                        mesh.layers.set(1);
+                        mesh.layers.enable(0); // Show in mono too
+                    });
+
+                    rightEyeSky.addEventListener('loaded', () => {
+                        const mesh = rightEyeSky.getObject3D('mesh');
+                        // Use a clone for the second material to have different offset
+                        mesh.material.map = texture.clone();
+                        mesh.material.map.repeat.set(1, 0.5);
+                        mesh.material.map.offset.set(0, isOU ? 0 : 0.5);
+                        mesh.material.needsUpdate = true;
+                        mesh.layers.set(2);
+                    });
+
+                    const updateCameraLayers = () => {
+                        const camera = scene.camera;
+                        if (!camera) return;
+                        if (scene.is('vr-mode')) {
+                            camera.layers.enable(1);
+                            camera.layers.enable(2);
+                        } else {
+                            camera.layers.disable(1);
+                            camera.layers.disable(2);
+                            camera.layers.enable(0);
+                        }
+                    };
+                    scene.addEventListener('enter-vr', updateCameraLayers);
+                    scene.addEventListener('exit-vr', updateCameraLayers);
+                } else {
+                    const newSky = document.createElement('a-sky');
+                    scene.appendChild(newSky);
+                    newSky.addEventListener('loaded', () => {
+                        const mesh = newSky.getObject3D('mesh');
+                        mesh.material.map = texture;
+                        mesh.material.needsUpdate = true;
+                    });
+                }
+
+                overlay.classList.remove('hidden');
+                loadingOverlay.classList.add('hidden');
+
+                if (scene.resize) scene.resize();
+                scene.play();
+                if (scene.render) scene.render();
+            }
+        });
+    });
+});
 
 AFRAME.registerComponent('thumbstick-rotate', {
     init: function () {
@@ -80,16 +145,15 @@ AFRAME.registerComponent('thumbstick-rotate', {
             this.axis.y = evt.detail.y;
         });
     },
-tick: function () {
+    tick: function () {
         if (!this.isGripping) return;
-        console.log (Math.abs(this.axis.x), Math.abs(this.axis.y) );
-        const sky = document.getElementById('vr-sky');
-        if (sky) {
-            // Apply rotation based on cached axis data
+        const skies = document.querySelectorAll('a-sky');
+        skies.forEach(sky => {
             const rotation = sky.getAttribute('rotation');
-        if (Math.abs(this.axis.x) > 0.10) { rotation.y -= this.axis.x * 1.5; } 
-        //if (Math.abs(this.axis.y) > 0.25) { rotation.x -= this.axis.y * 2; }
-            sky.setAttribute('rotation', rotation);
-        }
+            if (Math.abs(this.axis.x) > 0.10) {
+                rotation.y -= this.axis.x * 1.5;
+                sky.setAttribute('rotation', rotation);
+            }
+        });
     }
 });

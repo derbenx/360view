@@ -1,3 +1,5 @@
+body { font-family: sans-serif; }
+
 /* Ensure the overlay covers everything */
 #overlay {
     position: fixed !important;
@@ -22,9 +24,47 @@
 }
 
 .hidden {
-    display: none;
+    display: none !important;
 }
 
+#loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background-color: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 20000;
+    color: white;
+    text-align: center;
+}
+
+#loading-overlay.hidden {
+    display: none !important;
+}
+
+#loading-content {
+    width: 300px;
+}
+
+#progress-bar-container {
+    width: 100%;
+    height: 20px;
+    background-color: #333;
+    border-radius: 10px;
+    overflow: hidden;
+    margin-top: 10px;
+}
+
+#progress-bar {
+    width: 0%;
+    height: 100%;
+    background-color: #4CAF50;
+    transition: width 0.3s;
+}
 
 #panorama {
     width: 100%;
@@ -50,3 +90,7 @@ canvas.a-canvas {
     height: 100% !important;
     z-index: 9998; /* Just behind the back-button */
 }
+
+ul { list-style: none; padding: 20px; }
+li { margin: 10px 0; }
+a { cursor: pointer; color: blue; text-decoration: underline; }

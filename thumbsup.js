@@ -80,14 +80,18 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
                     existingImg.src = finalThumbUrl;
                 } else {
                     const newImg = document.createElement('img');
-                    newImg.src = finalThumbUrl;
                     newImg.alt = tile.getAttribute('data-filename');
                     newImg.loading = 'lazy';
                     newImg.onload = () => {
+                        console.log('thumbsup.js: New thumbnail loaded into UI:', finalThumbUrl);
                         const placeholder = imgContainer.querySelector('.placeholder');
                         if (placeholder) placeholder.style.display = 'none';
                         imgContainer.appendChild(newImg);
                     };
+                    newImg.onerror = (e) => {
+                        console.error('thumbsup.js: Failed to load the thumbnail we just made!', finalThumbUrl, e);
+                    };
+                    newImg.src = finalThumbUrl;
                 }
             }
         }

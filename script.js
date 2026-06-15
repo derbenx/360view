@@ -36,18 +36,29 @@ document.addEventListener('DOMContentLoaded', () => {
             const filename = tile.getAttribute('data-filename');
             const imgContainer = tile.querySelector('.tile-image-container');
 
+            if (!thumbSrc) {
+                console.warn('script.js: No thumbSrc for', filename);
+                tile.setAttribute('data-needs-thumb', 'true');
+                return;
+            }
+
             const img = document.createElement('img');
-            img.src = thumbSrc;
             img.alt = filename;
             img.loading = 'lazy';
+
+            // Set listeners BEFORE src
             img.onload = () => {
-                imgContainer.querySelector('.placeholder').style.display = 'none';
+                console.log('script.js: Thumbnail loaded successfully:', thumbSrc);
+                const placeholder = imgContainer.querySelector('.placeholder');
+                if (placeholder) placeholder.style.display = 'none';
                 imgContainer.appendChild(img);
             };
             img.onerror = () => {
-                console.warn(`Thumbnail not found for ${filename}. Keeping placeholder, will generate on view.`);
+                console.warn(`script.js: Thumbnail failed to load: ${thumbSrc}. Will generate on view.`);
                 tile.setAttribute('data-needs-thumb', 'true');
             };
+
+            img.src = thumbSrc;
         });
     } else {
         console.log('Thumbnails disabled. Strictly showing placeholders in gallery.');

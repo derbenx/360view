@@ -92,7 +92,7 @@ if ($debugLog) error_log("needsThumbsup result: " . ($needsThumbsup ? 'TRUE' : '
 
                     // Direct path to thumbnail for the browser to load
                     $normalizedRel = str_replace('\\', '/', $relative);
-                    $thumbUrl = 'thumbs' . $normalizedRel;
+                    $thumbUrl = './thumbs' . $normalizedRel;
 
                     if (file_exists(__DIR__ . '/' . $thumbUrl)) {
                         $hasThumb = true;

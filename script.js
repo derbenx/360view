@@ -1,12 +1,11 @@
 // Config
-const ENABLE_THUMBNAILS = true;
 const DOWNLOAD_TIMEOUT = 15000; // 15 seconds before considering a stall
 const MAX_RETRIES = 3;
 
 AFRAME.registerComponent('exit-vr-on-button', {
     init: function () {
         this.el.addEventListener('bbuttondown', () => {
-            console.log('B-button pressed: Exiting VR/Viewer');
+            debugLog('B-button pressed: Exiting VR/Viewer');
             const scene = document.querySelector('a-scene');
             if (scene.is('vr-mode')) {
                 scene.exitVR();
@@ -27,54 +26,19 @@ document.addEventListener('DOMContentLoaded', () => {
     let currentFileLoader = null;
     let retryCount = 0;
 
-    console.log('script.js: DOMContentLoaded. ENABLE_THUMBNAILS =', ENABLE_THUMBNAILS);
-
-    // --- Thumbnails ---
-    if (ENABLE_THUMBNAILS) {
-        document.querySelectorAll('.tile').forEach(tile => {
-            const thumbSrc = tile.getAttribute('data-thumb');
-            const filename = tile.getAttribute('data-filename');
-            const imgContainer = tile.querySelector('.tile-image-container');
-
-            if (!thumbSrc) {
-                console.warn('script.js: No thumbSrc for', filename);
-                tile.setAttribute('data-needs-thumb', 'true');
-                return;
-            }
-
-            const img = document.createElement('img');
-            img.alt = filename;
-            img.loading = 'lazy';
-
-            // Set listeners BEFORE src
-            img.onload = () => {
-                console.log('script.js: Thumbnail loaded successfully:', thumbSrc);
-                const placeholder = imgContainer.querySelector('.placeholder');
-                if (placeholder) placeholder.style.display = 'none';
-                imgContainer.appendChild(img);
-            };
-            img.onerror = () => {
-                console.warn(`script.js: Thumbnail failed to load: ${thumbSrc}. Will generate on view.`);
-                tile.setAttribute('data-needs-thumb', 'true');
-            };
-
-            img.src = thumbSrc;
-        });
-    } else {
-        console.log('Thumbnails disabled. Strictly showing placeholders in gallery.');
-    }
+    debugLog('script.js: DOMContentLoaded');
 
     // --- VR Button Management ---
     function checkVRSupport() {
         if (navigator.xr) {
             navigator.xr.isSessionSupported('immersive-vr').then((supported) => {
-                console.log('WebXR immersive-vr supported:', supported);
+                debugLog('WebXR immersive-vr supported:', supported);
                 if (supported) {
                     createVRButton();
                 }
             });
         } else {
-            console.log("WebXR (navigator.xr) not available in this browser.");
+            debugLog("WebXR (navigator.xr) not available in this browser.");
         }
     }
 
@@ -96,7 +60,7 @@ document.addEventListener('DOMContentLoaded', () => {
             pointer-events: auto;
         `;
         btn.addEventListener('click', () => {
-            console.log('Entering VR mode...');
+            debugLog('Entering VR mode...');
             scene.enterVR();
         });
         vrButtonContainer.appendChild(btn);
@@ -106,7 +70,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     // --- UI Logic ---
     function closeViewer() {
-        console.log('Closing 360 viewer');
+        debugLog('Closing 360 viewer');
         if (overlay.classList.contains('hidden')) return;
 
         overlay.classList.add('hidden');
@@ -130,7 +94,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     document.getElementById('cancel-load').addEventListener('click', () => {
-        console.log('Loading cancelled by user');
+        debugLog('Loading cancelled by user');
         if (currentFileLoader) {
             currentFileLoader = null;
         }
@@ -144,7 +108,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const fileName = tile.getAttribute('data-filename').toUpperCase();
             const needsThumb = tile.getAttribute('data-needs-thumb') === 'true';
 
-            console.log('Tile clicked:', { src, fileName, needsThumb });
+            debugLog('Tile clicked:', { src, fileName, needsThumb });
 
             requestOrientationPermission();
             loadImageWithRetry(src, fileName, needsThumb);
@@ -154,10 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
     function requestOrientationPermission() {
         if (typeof DeviceOrientationEvent !== 'undefined' &&
             typeof DeviceOrientationEvent.requestPermission === 'function') {
-            console.log('Requesting DeviceOrientation permission...');
+            debugLog('Requesting DeviceOrientation permission...');
             DeviceOrientationEvent.requestPermission()
                 .then(permissionState => {
-                    console.log('DeviceOrientation permission state:', permissionState);
+                    debugLog('DeviceOrientation permission state:', permissionState);
                 })
                 .catch(err => console.error('Permission request error:', err));
         }

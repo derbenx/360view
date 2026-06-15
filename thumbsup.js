@@ -4,7 +4,7 @@
  */
 
 window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
-    console.log('thumbsup.js: Attempting to generate thumbnail for', sourcePath);
+    debugLog('thumbsup.js: Attempting to generate thumbnail for', sourcePath);
 
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
@@ -40,12 +40,12 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
         x = (150 - drawWidth) / 2;
     }
 
-    console.log(`thumbsup.js: Drawing ${imgWidth}x${imgHeight} to 150x100 canvas at (${x},${y}) with size ${drawWidth}x${drawHeight}`);
+    debugLog(`thumbsup.js: Drawing ${imgWidth}x${imgHeight} to 150x100 canvas at (${x},${y}) with size ${drawWidth}x${drawHeight}`);
     ctx.drawImage(imageElement, x, y, drawWidth, drawHeight);
 
     // Convert to base64
     const dataUrl = canvas.toDataURL('image/jpeg', 0.8);
-    console.log('thumbsup.js: Data URL generated. Base64 length:', dataUrl.length);
+    debugLog('thumbsup.js: Data URL generated. Base64 length:', dataUrl.length);
 
     // Upload
     fetch('thumbnail.php', {
@@ -63,12 +63,12 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
         return response.json();
     })
     .then(data => {
-        console.log('thumbsup.js: Server response:', data);
+        debugLog('thumbsup.js: Server response:', data);
 
         if (data.status === 'success' || data.status === 'exists') {
             const tile = document.querySelector(`.tile[data-src="${CSS.escape(sourcePath)}"]`);
             if (tile) {
-                console.log('thumbsup.js: Updating tile UI for', sourcePath);
+                debugLog('thumbsup.js: Updating tile UI for', sourcePath);
                 tile.setAttribute('data-needs-thumb', 'false');
                 const imgContainer = tile.querySelector('.tile-image-container');
                 const existingImg = imgContainer.querySelector('img');
@@ -81,11 +81,12 @@ window.generateAndUploadThumbnail = function(imageElement, sourcePath) {
                 } else {
                     const newImg = document.createElement('img');
                     newImg.alt = tile.getAttribute('data-filename');
-                    newImg.loading = 'lazy';
+                    // Removed loading=lazy to ensure immediate load
                     newImg.onload = () => {
-                        console.log('thumbsup.js: New thumbnail loaded into UI:', finalThumbUrl);
+                        debugLog('thumbsup.js: New thumbnail loaded into UI:', finalThumbUrl);
                         const placeholder = imgContainer.querySelector('.placeholder');
                         if (placeholder) placeholder.style.display = 'none';
+                        newImg.style.display = 'block';
                         imgContainer.appendChild(newImg);
                     };
                     newImg.onerror = (e) => {

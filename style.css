@@ -78,6 +78,10 @@ header h1 {
     width: 100%;
     height: 100%;
     object-fit: cover;
+    display: none; /* Hidden until loaded */
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .placeholder {
@@ -90,6 +94,9 @@ header h1 {
         #333 10px,
         #333 20px
     );
+    position: absolute;
+    top: 0;
+    left: 0;
 }
 
 .tile-info {

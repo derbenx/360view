@@ -38,9 +38,52 @@ $allFiles = scanAllFiles($baseDir);
 sort($allFiles);
 if ($debugLog) error_log("Found " . count($allFiles) . " files in $baseDir");
 
+$realBase = realpath($baseDir);
+
+// Thumbnail Cleanup Routine
+function cleanupThumbs($thumbsDir, $allSourceFiles, $realBase, $debugLog) {
+    if (!is_dir($thumbsDir)) return;
+
+    $realThumbsBase = realpath($thumbsDir);
+    if (!$realThumbsBase) return;
+
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($realThumbsBase, RecursiveDirectoryIterator::SKIP_DOTS),
+        RecursiveIteratorIterator::CHILD_FIRST
+    );
+
+    foreach ($iterator as $item) {
+        $path = $item->getRealPath();
+        if ($item->isDir()) {
+            $files = scandir($path);
+            if (count($files) === 2) { // only . and ..
+                if ($debugLog) error_log("Cleaning up empty thumb dir: $path");
+                @rmdir($path);
+            }
+        } else {
+            $relative = substr($path, strlen($realThumbsBase));
+            $sourceFile = realpath($realBase . $relative);
+
+            $found = false;
+            foreach ($allSourceFiles as $sf) {
+                if ($sf === $sourceFile) {
+                    $found = true;
+                    break;
+                }
+            }
+
+            if (!$found) {
+                if ($debugLog) error_log("Cleaning up orphaned thumb: $path");
+                @unlink($path);
+            }
+        }
+    }
+}
+
+cleanupThumbs($thumbsRootDir, $allFiles, $realBase, $debugLog);
+
 // Check for missing thumbnails to conditionally load thumbsup.js
 $needsThumbsup = false;
-$realBase = realpath($baseDir);
 
 if ($realBase === false) {
     if ($debugLog) error_log("CRITICAL: realpath failed for $baseDir");
@@ -109,6 +152,11 @@ if ($debugLog) error_log("needsThumbsup result: " . ($needsThumbsup ? 'TRUE' : '
                      data-needs-thumb="<?php echo $hasThumb ? 'false' : 'true'; ?>">
                     <div class="tile-image-container">
                         <div class="placeholder"></div>
+                        <?php if ($hasThumb): ?>
+                            <img src="<?php echo htmlspecialchars($thumbUrl); ?>"
+                                 alt="<?php echo htmlspecialchars($fileName); ?>"
+                                 onload="this.previousElementSibling.style.display='none'; this.style.display='block';">
+                        <?php endif; ?>
                     </div>
                     <div class="tile-info">
                         <span class="tile-name"><?php echo htmlspecialchars($fileName); ?></span>
@@ -145,6 +193,12 @@ if ($debugLog) error_log("needsThumbsup result: " . ($needsThumbsup ? 'TRUE' : '
         </a-scene>
     </div>
 
+    <script>
+        const DEBUG = <?php echo $debugLog ? 'true' : 'false'; ?>;
+        function debugLog(...args) {
+            if (DEBUG) console.log(...args);
+        }
+    </script>
     <script src="script.js"></script>
     <?php if ($needsThumbsup): ?>
         <script src="thumbsup.js"></script>

@@ -108,10 +108,26 @@ document.addEventListener('DOMContentLoaded', () => {
             const fileName = tile.getAttribute('data-filename').toUpperCase();
             const needsThumb = tile.getAttribute('data-needs-thumb') === 'true';
 
-            debugLog('Tile clicked:', { src, fileName, needsThumb });
+            debugLog('Tile clicked (image):', { src, fileName, needsThumb });
 
             requestOrientationPermission();
             loadImageWithRetry(src, fileName, needsThumb);
+        });
+    });
+
+    document.querySelectorAll('.folder-tile').forEach(item => {
+        item.addEventListener('click', e => {
+            const tile = e.currentTarget;
+            const path = tile.getAttribute('data-path');
+            debugLog('Tile clicked (folder):', path);
+
+            const url = new URL(window.location);
+            if (path) {
+                url.searchParams.set('dir', path);
+            } else {
+                url.searchParams.delete('dir');
+            }
+            window.location.href = url.toString();
         });
     });
 

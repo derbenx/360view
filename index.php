@@ -34,18 +34,62 @@ function scanAllFiles($dir) {
     return $files;
 }
 
-$allFiles = scanAllFiles($baseDir);
-sort($allFiles);
-if ($debugLog) error_log("Found " . count($allFiles) . " files in $baseDir");
+// Navigation and Path Security
+$currentRelDir = isset($_GET['dir']) ? $_GET['dir'] : '';
+$currentRelDir = str_replace(['..', '\\'], ['', '/'], $currentRelDir);
+$currentRelDir = trim($currentRelDir, '/');
 
 $realBase = realpath($baseDir);
+$targetDir = realpath($realBase . ($currentRelDir ? '/' . $currentRelDir : ''));
 
-// Thumbnail Cleanup Routine
+if ($targetDir === false || strpos($targetDir, $realBase) !== 0) {
+    $targetDir = $realBase;
+    $currentRelDir = '';
+}
+
+// Scanning Logic
+function getDirContents($dir, $realBase) {
+    $files = [];
+    $folders = [];
+    if (!is_dir($dir)) return [[], []];
+
+    $items = array_diff(scandir($dir), array('.', '..'));
+    foreach ($items as $item) {
+        $path = $dir . '/' . $item;
+        $realPath = realpath($path);
+        if ($realPath === false) continue;
+
+        if (is_dir($realPath)) {
+            $folders[] = [
+                'name' => $item,
+                'path' => $realPath,
+                'relative' => trim(substr($realPath, strlen($realBase)), DIRECTORY_SEPARATOR)
+            ];
+        } else {
+            if (preg_match('/\.(jpg|jpeg|png|webp|jfif)$/i', $item)) {
+                $files[] = $realPath;
+            }
+        }
+    }
+    return [$folders, $files];
+}
+
+list($currentFolders, $currentFiles) = getDirContents($targetDir, $realBase);
+sort($currentFolders);
+sort($currentFiles);
+
+$allFiles = scanAllFiles($baseDir);
+
+// Thumbnail Cleanup Routine with Whitelist
 function cleanupThumbs($thumbsDir, $allSourceFiles, $realBase, $debugLog) {
     if (!is_dir($thumbsDir)) return;
 
+    $whitelist = ['back.jpg', 'folder.jpg'];
     $realThumbsBase = realpath($thumbsDir);
     if (!$realThumbsBase) return;
+
+    // Convert allSourceFiles to an associative array for O(1) lookup
+    $sourceLookup = array_flip($allSourceFiles);
 
     $iterator = new RecursiveIteratorIterator(
         new RecursiveDirectoryIterator($realThumbsBase, RecursiveDirectoryIterator::SKIP_DOTS),
@@ -54,6 +98,8 @@ function cleanupThumbs($thumbsDir, $allSourceFiles, $realBase, $debugLog) {
 
     foreach ($iterator as $item) {
         $path = $item->getRealPath();
+        $filename = $item->getFilename();
+
         if ($item->isDir()) {
             $files = scandir($path);
             if (count($files) === 2) { // only . and ..
@@ -61,18 +107,12 @@ function cleanupThumbs($thumbsDir, $allSourceFiles, $realBase, $debugLog) {
                 @rmdir($path);
             }
         } else {
+            if (in_array($filename, $whitelist)) continue;
+
             $relative = substr($path, strlen($realThumbsBase));
             $sourceFile = realpath($realBase . $relative);
 
-            $found = false;
-            foreach ($allSourceFiles as $sf) {
-                if ($sf === $sourceFile) {
-                    $found = true;
-                    break;
-                }
-            }
-
-            if (!$found) {
+            if ($sourceFile === false || !isset($sourceLookup[$sourceFile])) {
                 if ($debugLog) error_log("Cleaning up orphaned thumb: $path");
                 @unlink($path);
             }
@@ -84,20 +124,12 @@ cleanupThumbs($thumbsRootDir, $allFiles, $realBase, $debugLog);
 
 // Check for missing thumbnails to conditionally load thumbsup.js
 $needsThumbsup = false;
-
-if ($realBase === false) {
-    if ($debugLog) error_log("CRITICAL: realpath failed for $baseDir");
-} else {
-    foreach ($allFiles as $file) {
-        if ($file !== false && strpos($file, $realBase) === 0) {
-            $relative = substr($file, strlen($realBase));
-            $thumbPath = $thumbsRootDir . $relative;
-            if (!file_exists($thumbPath)) {
-                if ($debugLog) error_log("Missing thumbnail for: $file (Target: $thumbPath)");
-                $needsThumbsup = true;
-                break;
-            }
-        }
+foreach ($currentFiles as $file) {
+    $relative = substr($file, strlen($realBase));
+    $thumbPath = $thumbsRootDir . $relative;
+    if (!file_exists($thumbPath)) {
+        $needsThumbsup = true;
+        break;
     }
 }
 if ($debugLog) error_log("needsThumbsup result: " . ($needsThumbsup ? 'TRUE' : 'FALSE'));
@@ -122,28 +154,51 @@ if ($debugLog) error_log("needsThumbsup result: " . ($needsThumbsup ? 'TRUE' : '
 
     <main id="gallery-container">
         <div id="gallery-grid">
-            <?php foreach($allFiles as $file):
+            <?php if ($currentRelDir):
+                $parentDir = dirname($currentRelDir);
+                if ($parentDir === '.') $parentDir = '';
+                $backThumb = './thumbs/back.jpg';
+                $hasBackThumb = file_exists(__DIR__ . '/' . $backThumb);
+            ?>
+                <div class="tile folder-tile" data-path="<?php echo htmlspecialchars($parentDir); ?>">
+                    <div class="tile-image-container">
+                        <div class="placeholder"></div>
+                        <?php if ($hasBackThumb): ?>
+                            <img src="<?php echo htmlspecialchars($backThumb); ?>" alt="Back"
+                                 onload="this.previousElementSibling.style.display='none'; this.style.display='block';">
+                        <?php endif; ?>
+                    </div>
+                    <div class="tile-info">
+                        <span class="tile-name">.. Back</span>
+                    </div>
+                </div>
+            <?php endif; ?>
+
+            <?php foreach($currentFolders as $folder):
+                $folderThumb = './thumbs/folder.jpg';
+                $hasFolderThumb = file_exists(__DIR__ . '/' . $folderThumb);
+            ?>
+                <div class="tile folder-tile" data-path="<?php echo htmlspecialchars(str_replace('\\', '/', $folder['relative'])); ?>">
+                    <div class="tile-image-container">
+                        <div class="placeholder"></div>
+                        <?php if ($hasFolderThumb): ?>
+                            <img src="<?php echo htmlspecialchars($folderThumb); ?>" alt="Folder"
+                                 onload="this.previousElementSibling.style.display='none'; this.style.display='block';">
+                        <?php endif; ?>
+                    </div>
+                    <div class="tile-info">
+                        <span class="tile-name"><?php echo htmlspecialchars($folder['name']); ?></span>
+                    </div>
+                </div>
+            <?php endforeach; ?>
+
+            <?php foreach($currentFiles as $file):
                 $fileName = basename($file);
-                $relative = '';
-                $relativeToRoot = '';
-                $thumbUrl = '';
-                $hasThumb = false;
-
-                if ($realBase !== false && $file !== false && strpos($file, $realBase) === 0) {
-                    $relative = substr($file, strlen($realBase));
-                    $relativeToRoot = trim(dirname($relative), DIRECTORY_SEPARATOR);
-
-                    // Direct path to thumbnail for the browser to load
-                    $normalizedRel = str_replace('\\', '/', $relative);
-                    $thumbUrl = './thumbs' . $normalizedRel;
-
-                    if (file_exists(__DIR__ . '/' . $thumbUrl)) {
-                        $hasThumb = true;
-                    }
-                }
-
-                // We need to pass a path that the scripts can understand
-                $webPath = './360-8K' . str_replace('\\', '/', $relative);
+                $relative = substr($file, strlen($realBase));
+                $normalizedRel = str_replace('\\', '/', $relative);
+                $thumbUrl = './thumbs' . $normalizedRel;
+                $hasThumb = file_exists(__DIR__ . '/' . $thumbUrl);
+                $webPath = './360-8K' . $normalizedRel;
             ?>
                 <div class="tile open-image"
                      data-src="<?php echo htmlspecialchars($webPath); ?>"
@@ -160,9 +215,6 @@ if ($debugLog) error_log("needsThumbsup result: " . ($needsThumbsup ? 'TRUE' : '
                     </div>
                     <div class="tile-info">
                         <span class="tile-name"><?php echo htmlspecialchars($fileName); ?></span>
-                        <?php if ($relativeToRoot): ?>
-                            <span class="tile-path"><?php echo htmlspecialchars($relativeToRoot); ?></span>
-                        <?php endif; ?>
                     </div>
                 </div>
             <?php endforeach; ?>
